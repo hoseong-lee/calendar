@@ -70,6 +70,9 @@ createApp({
       },
       results: null,
       copied: '',
+      // 달력 뷰 (현재 표시 중인 연/월)
+      calYear: new Date().getFullYear(),
+      calMon: new Date().getMonth(),
     };
   },
 
@@ -99,6 +102,38 @@ createApp({
       return [...this.schedules].sort((a, b) =>
         (a.date + (a.start || '')).localeCompare(b.date + (b.start || ''))
       );
+    },
+    calLabel() {
+      return `${this.calYear}년 ${this.calMon + 1}월`;
+    },
+    // 6주(42칸) 달력 셀. 각 셀에 해당 날짜의 일정 목록 포함.
+    calCells() {
+      const first = new Date(this.calYear, this.calMon, 1);
+      const start = new Date(first);
+      start.setDate(1 - first.getDay()); // 그 주 일요일부터
+      const todayKey = dateKey(new Date());
+      const byDate = {};
+      for (const s of this.schedules) (byDate[s.date] || (byDate[s.date] = [])).push(s);
+      const cells = [];
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const key = dateKey(d);
+        const items = (byDate[key] || []).sort((a, b) =>
+          (a.allDay ? '' : a.start || '').localeCompare(b.allDay ? '' : b.start || '')
+        );
+        cells.push({
+          key,
+          day: d.getDate(),
+          dow: d.getDay(),
+          inMonth: d.getMonth() === this.calMon,
+          isToday: key === todayKey,
+          holiday: holidayName(key),
+          isHol: isHoliday(key),
+          items,
+        });
+      }
+      return cells;
     },
   },
 
@@ -333,6 +368,20 @@ createApp({
         .map((s) => `${s.ownerName}${s.allDay ? '(종일)' : ` ${s.start}~${s.end}`}`)
         .join(', ');
     },
+    // ── 달력 네비게이션 ──
+    prevMonth() {
+      if (this.calMon === 0) { this.calMon = 11; this.calYear--; }
+      else this.calMon--;
+    },
+    nextMonth() {
+      if (this.calMon === 11) { this.calMon = 0; this.calYear++; }
+      else this.calMon++;
+    },
+    goToday() {
+      const n = new Date();
+      this.calYear = n.getFullYear();
+      this.calMon = n.getMonth();
+    },
   },
 
   mounted() {
@@ -482,9 +531,40 @@ createApp({
     </section>
   </div>
 
-  <!-- ── 전체 등록 현황 ── -->
+  <!-- ── 전체 등록 현황 (달력) ── -->
   <section class="card">
     <h2>전체 일정 현황 <span class="cnt">({{ schedules.length }}건)</span></h2>
+
+    <div class="cal">
+      <div class="cal-bar">
+        <button class="mini" @click="prevMonth">‹</button>
+        <span class="cal-label">{{ calLabel }}</span>
+        <button class="mini" @click="nextMonth">›</button>
+        <button class="mini" @click="goToday">오늘</button>
+      </div>
+      <div class="cal-grid cal-dow">
+        <div v-for="(w, i) in ['일','월','화','수','목','금','토']" :key="w"
+             :class="{ sun: i===0, sat: i===6 }">{{ w }}</div>
+      </div>
+      <div class="cal-grid">
+        <div v-for="c in calCells" :key="c.key"
+             class="cal-cell"
+             :class="{ out: !c.inMonth, today: c.isToday, hol: c.isHol, sun: c.dow===0, sat: c.dow===6 }">
+          <div class="cal-num">
+            {{ c.day }}<span v-if="c.holiday" class="cal-hol">{{ c.holiday }}</span>
+          </div>
+          <div class="cal-items">
+            <div v-for="s in c.items.slice(0,3)" :key="s.id" class="chip"
+                 :title="s.ownerName + ' · ' + (s.allDay ? '종일' : s.start + '~' + s.end) + ' · ' + s.title">
+              <span class="chip-t">{{ s.allDay ? '종일' : s.start }}</span> {{ s.title }}
+            </div>
+            <div v-if="c.items.length > 3" class="chip more">+{{ c.items.length - 3 }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>목록</h3>
     <ul class="list compact">
       <li v-for="s in allSorted" :key="s.id">
         <div class="item-main">
