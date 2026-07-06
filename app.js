@@ -90,6 +90,22 @@ const LS = {
       localStorage.setItem('cal.myGroups', JSON.stringify(list));
     },
   },
+  adminGrants: { // groupId -> adminToken (이 그룹에 대한 관리자 링크로 접속했음)
+    get() {
+      try { return JSON.parse(localStorage.getItem('cal.adminGrants') || '{}'); }
+      catch (e) { return {}; }
+    },
+    set(id, token) {
+      const map = LS.adminGrants.get();
+      map[id] = token;
+      localStorage.setItem('cal.adminGrants', JSON.stringify(map));
+    },
+    remove(id) {
+      const map = LS.adminGrants.get();
+      delete map[id];
+      localStorage.setItem('cal.adminGrants', JSON.stringify(map));
+    },
+  },
   visited: { // 참여자로 최근 방문한 모임
     get() {
       try { return JSON.parse(localStorage.getItem('cal.visited') || '[]'); }
@@ -178,7 +194,11 @@ createApp({
       return 'group';
     },
     isAdmin() {
-      return !!this.groupMeta && this.groupMeta.creatorKey === this.ownerKey;
+      if (!this.groupMeta) return false;
+      if (this.groupMeta.creatorKey === this.ownerKey) return true;
+      const t = this.groupMeta.adminToken;
+      if (t && LS.adminGrants.get()[this.groupId] === t) return true;
+      return false;
     },
     calLabel() {
       return `${this.calYear}년 ${this.calMon + 1}월`;
@@ -214,7 +234,7 @@ createApp({
       const dragRange = this.dragging
         ? new Set(rangeKeys(this.dragStart, this.dragEnd || this.dragStart))
         : null;
-      const recSet = this.isAdmin && this.recResult
+      const recSet = this.recResult
         ? new Set(this.recResult.available.map((r) => r.key))
         : null;
       const cells = [];
@@ -256,9 +276,13 @@ createApp({
     shareUrl() {
       return `${location.origin}${location.pathname}?g=${this.groupId}`;
     },
-    // 관리자용 추천 결과
+    adminShareUrl() {
+      if (!this.groupMeta || !this.groupMeta.adminToken) return '';
+      return `${location.origin}${location.pathname}?g=${this.groupId}&admin=${this.groupMeta.adminToken}`;
+    },
+    // 가능 날짜 추천 (관리자·참여자 모두 볼 수 있음)
     recResult() {
-      if (!this.recOpen || !this.isAdmin) return null;
+      if (!this.recOpen) return null;
       const start = this.rec.rangeStart;
       const end = this.rec.rangeEnd;
       if (!start || !end) return null;
@@ -345,10 +369,27 @@ createApp({
             this.groupLoading = false;
             return;
           }
+          // URL의 admin 파라미터가 meta.adminToken 과 일치하면 관리자로 인정
+          const params = new URLSearchParams(location.search);
+          const adminParam = params.get('admin');
+          if (adminParam && meta.adminToken && adminParam === meta.adminToken) {
+            LS.adminGrants.set(id, adminParam);
+          }
           this.groupMeta = meta;
-          if (meta.creatorKey === this.ownerKey) {
+          const isAdminNow =
+            meta.creatorKey === this.ownerKey ||
+            (meta.adminToken && LS.adminGrants.get()[id] === meta.adminToken);
+          if (isAdminNow) {
             LS.myGroups.add(id, meta.name || '(이름 없음)');
             this.myGroups = LS.myGroups.get();
+            // 옛 그룹 마이그레이션: 관리자인데 meta.adminToken이 없으면 새로 발급
+            if (!meta.adminToken) {
+              const t = randId() + randId();
+              gRef.child('meta').update({ adminToken: t }).then(() => {
+                this.groupMeta = { ...this.groupMeta, adminToken: t };
+                LS.adminGrants.set(id, t);
+              });
+            }
           } else {
             LS.visited.add(id, meta.name || '(이름 없음)');
             this.visited = LS.visited.get();
@@ -376,15 +417,18 @@ createApp({
       if (!this.user) { this.authError = '인증 준비 중입니다.'; return; }
       if (!this.nickname) { this.showNickPrompt = true; return; }
       const ref = groupsRef.push();
+      const adminToken = randId() + randId();
       ref.child('meta').set({
         id: ref.key,
         name,
         creatorUid: this.user.uid,
         creatorKey: this.ownerKey,
         creatorName: this.nickname,
+        adminToken,
         createdAt: firebase.database.ServerValue.TIMESTAMP,
       })
         .then(() => {
+          LS.adminGrants.set(ref.key, adminToken);
           this.newGroupName = '';
           this.openGroup(ref.key);
         })
@@ -450,7 +494,14 @@ createApp({
     // ── 공유 링크 ──
     copyShare() {
       navigator.clipboard.writeText(this.shareUrl).then(() => {
-        this.copied = true;
+        this.copied = 'member';
+        setTimeout(() => (this.copied = false), 1500);
+      });
+    },
+    copyAdminShare() {
+      if (!this.adminShareUrl) return;
+      navigator.clipboard.writeText(this.adminShareUrl).then(() => {
+        this.copied = 'admin';
         setTimeout(() => (this.copied = false), 1500);
       });
     },
@@ -769,8 +820,11 @@ createApp({
         <div class="ghead-meta">
           <span class="cnt">참여자 {{ participants.length }}명 · 불가 {{ schedules.length }}건</span>
           <button class="mini" @click="goHome">← 홈</button>
-          <button class="mini" @click="copyShare">{{ copied ? '복사됨!' : '🔗 공유 링크' }}</button>
+          <button class="mini" @click="copyShare">{{ copied === 'member' ? '복사됨!' : '🔗 참여자 링크' }}</button>
           <template v-if="isAdmin">
+            <button class="mini" @click="copyAdminShare" v-if="adminShareUrl">
+              {{ copied === 'admin' ? '복사됨!' : '👑 관리자 링크' }}
+            </button>
             <button class="mini" @click="renameGroup">이름 변경</button>
             <button class="mini danger" @click="deleteGroup">모임 삭제</button>
           </template>
@@ -817,7 +871,7 @@ createApp({
                  class="chip"
                  :class="{ mine: s.ownerKey === ownerKey }"
                  :title="s.ownerName + ' · ' + (s.allDay ? '종일' : s.start + '~' + s.end) + (s.title ? ' · ' + s.title : '')">
-              🚫 {{ s.ownerName }}<span v-if="!s.allDay"> ({{ s.start }})</span>
+              {{ s.ownerName }}<span v-if="!s.allDay" class="chip-t"> {{ s.start }}</span>
             </div>
             <div v-if="c.items.length > 4" class="chip more">+{{ c.items.length - 4 }}</div>
           </div>
@@ -825,8 +879,8 @@ createApp({
       </div>
     </section>
 
-    <!-- ── 관리자: 가능 날짜 추천 ── -->
-    <section v-if="isAdmin" class="card">
+    <!-- ── 가능 날짜 추천 (전원 열람 가능) ── -->
+    <section class="card">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2 style="margin:0;">📅 가능 날짜 추천</h2>
         <button class="mini" @click="toggleRec">{{ recOpen ? '접기' : '펼치기' }}</button>

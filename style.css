@@ -178,12 +178,53 @@ input:focus { outline: none; border-color: var(--accent); }
 
 /* ── 반응형 ── */
 @media (max-width: 640px) {
-  .wrap { padding: 12px; }
-  .cal-cell { min-height: 72px; padding: 4px 4px; }
-  .chip { font-size: 10px; }
+  body { font-size: 14px; }
+  .wrap { padding: 8px; }
+  .card { padding: 12px; border-radius: 12px; margin-bottom: 12px; }
+  .topbar { padding: 8px 2px 12px; }
+  .brand { font-size: 18px; }
+
+  /* 달력 */
+  .cal-bar { gap: 6px; }
+  .cal-label { font-size: 15px; min-width: 96px; }
+  .cal-grid { gap: 2px; }
+  .cal-dow > div { font-size: 11px; padding: 2px 0; }
+  .cal-cell {
+    min-height: 88px;
+    padding: 3px 3px;
+    border-radius: 6px;
+    gap: 2px;
+  }
+  .cal-num { font-size: 11.5px; gap: 2px; }
+  .cal-hol { display: none; }         /* 셀 안 공휴일 이름은 숨김 (헤더 색상으로 구분) */
   .cal-hint { display: none; }
-  .ghead-name { font-size: 18px; }
-  .ghead-meta { gap: 6px; }
+  .chip {
+    font-size: 10.5px;
+    line-height: 1.25;
+    padding: 1px 3px;
+    border-radius: 3px;
+  }
+  .chip.more { padding: 0 3px; }
+
+  /* 그룹 헤더 */
+  .ghead-name { font-size: 17px; }
+  .ghead-meta { gap: 6px; row-gap: 6px; }
+  .admin-badge { font-size: 10px; padding: 1px 6px; }
+
+  /* 리스트/모달 */
+  .list li { padding: 8px 10px; }
+  .item-actions { gap: 4px; }
+  .modal { border-radius: 12px; max-height: 92vh; }
+  .modal-head, .modal-body { padding-left: 14px; padding-right: 14px; }
+  .modal-foot { padding: 10px 14px 14px; }
+
+  /* 추천 랭킹 */
+  .ranked li { padding: 10px 12px; padding-left: 40px; }
+}
+
+@media (max-width: 380px) {
+  .cal-cell { min-height: 74px; }
+  .chip { font-size: 10px; }
 }
 
 /* ── 관리자 배지 / 추천 별 ── */
