@@ -176,8 +176,8 @@ createApp({
 
       copied: false,
 
-      // 관리자 추천 옵션
-      recOpen: false,
+      // 추천 옵션 (기본 펼침)
+      recOpen: true,
       rec: {
         rangeStart: dateKey(now),
         rangeEnd: dateKey(new Date(now.getFullYear(), now.getMonth() + 2, now.getDate())),
@@ -355,7 +355,7 @@ createApp({
       this.groupMeta = null;
       this.schedules = [];
       this.groupNotFound = false;
-      this.recOpen = false;
+      this.recOpen = true;
     },
     loadGroup(id) {
       this.unloadGroup();
@@ -871,7 +871,7 @@ createApp({
                  class="chip"
                  :class="{ mine: s.ownerKey === ownerKey }"
                  :title="s.ownerName + ' · ' + (s.allDay ? '종일' : s.start + '~' + s.end) + (s.title ? ' · ' + s.title : '')">
-              {{ s.ownerName }}<span v-if="!s.allDay" class="chip-t"> {{ s.start }}</span>
+              🚫 {{ s.ownerName }}<span v-if="!s.allDay" class="chip-t"> {{ s.start }}</span>
             </div>
             <div v-if="c.items.length > 4" class="chip more">+{{ c.items.length - 4 }}</div>
           </div>
@@ -885,7 +885,12 @@ createApp({
         <h2 style="margin:0;">📅 가능 날짜 추천</h2>
         <button class="mini" @click="toggleRec">{{ recOpen ? '접기' : '펼치기' }}</button>
       </div>
-      <div v-if="recOpen" style="margin-top: 14px;">
+      <p class="help" style="margin-top:10px;">
+        참여자들이 등록한 <b>불가 일정</b>을 취합해서, 아래 기간 안에서 모두(또는 지정한 최소 인원)가 <b>가능한 날짜</b>를 점수순으로 보여줍니다.
+        점수 가산 기준: <b>다음날 공휴일 +3</b> · <b>다음날 주말 +2</b> · <b>당일 휴일 +1</b> · <b>전원 가능 +1</b>.
+        추천 날짜는 달력에도 ⭐로 표시돼요.
+      </p>
+      <div v-if="recOpen" style="margin-top: 6px;">
         <div class="formgrid">
           <div class="times">
             <label>시작일 <input type="date" v-model="rec.rangeStart" /></label>
